@@ -1,0 +1,440 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////Part 1 Variables //////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+////Report Details
+Let vReportName = 'QVD - Arrest Booking with Charges';
+
+////Report Description
+Let vReportDescription = 'This application is only used to build a data source that closely matches the Discoverer Folder that shares the same name. ';
+
+// Report owner
+Let vReportOwner = 'APD Information Systems';
+
+//Change History Log changes in this area to help people know what has changed
+Let vReportChanges = '';
+
+////QVD Details
+////QVD Builder Variables
+Let vDBFrom = 'APDIOD.AB_CHARGES_PEOPLE_VW'; //Source Table $(vDBFrom)
+// Where part (used in two places both the where statement but also passed into a column so it can be called as metadata on the qvd)
+// Let vWHERE_PART = 'where rt= ''GO'''; //called as  $(WHERE_PART) also 
+//take note this isn't the typical where statement we have use ' ' (escape character) when we want '
+//to put those allow for the system to view the 'GO'
+//Folder to place QVD in 
+LET vFOLDER='lib://APD QVDs - BusinessTechnology/BusinessTechnology\QVDs\APDIOD\Test'; //called as $(FOLDER)
+//Name of QVD Note that the Folder is passed in the variable
+// Where part (used in two places both the where statement but also passed into a column so it can be called as metadata on the qvd)
+Let vQlikTable = 'Arrest Booking with Charges'; //Qlik Table used for all the data moving forward $(vQlikTable)
+LET vQVD='[$(vFOLDER)/$(vQlikTable).qvd]'; // called as $(QVD)LET MetadataPath = ‘$(vFOLDER)/Metadata/$(vQlikTable)_Metadata.qvd’;
+
+LET MetadataPath = '$(vFOLDER)/Metadata/$(vQlikTable)_Metadata.qvd';
+//We also will look for an existing Metadata QVD and if one is not found, we will create it.
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 2 Meta data ///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+IF FileSize('$(MetadataPath)') > 0 THEN //  The Metadata QVD already exists.
+ELSE // The Metadata QVD needs to be created
+
+Metadata:
+LOAD * INLINE [
+     "Qlik Table Name"
+    , "Source Table Name"
+	, "Source Where Statement"
+	, "QVD Location"
+    , "Reloaded Date"
+    , "Start Time"
+    , "End Time"
+	, "Source Row Count"
+    , "QVD Row Count"  
+    , "QVD Count of Fields"
+    ];
+	STORE Metadata INTO '$(MetadataPath)'(qvd);
+	DROP TABLE Metadata
+;
+END IF  
+
+sub Stats    
+     LET vEndTime = NOW();
+     LET vQVDRowCount = NoOfRows('$(vQlikTable)');
+     LET vFields  = NoOfFields('$(vQlikTable)');
+    
+     Metadata:
+     LOAD * FROM '$(MetadataPath)'(qvd); //   WHERE TableName <> ‘$(vQlikTable)’
+     CONCATENATE (Metadata)
+     LOAD DISTINCT 
+	'$(vQlikTable)' as "Qlik Table Name"
+    ,'$(vDBFrom)' as "Source Table Name"
+    ,'$(vWHERE_PART)' as "Source Where Statement"
+    ,'$(vQVD)' as "QVD Location"
+    ,DATE(NOW()) AS "Reloaded Date"
+    ,'$(vStartTime)' as "Start Time"
+    ,'$(vEndTime)' as "End Time"
+    ,'$(vDBRowCount)' as "Source Row Count"
+    ,'$(vQVDRowCount)' as "QVD Row Count" 
+    ,'$(vFields)' as "QVD Count of Fields"
+     RESIDENT Metadata;
+     STORE Metadata INTO $(MetadataPath)(qvd);
+//     DROP TABLE Metadata;
+	 
+end sub 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 3 Mapping /////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 4 Load File ///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+LIB CONNECT TO 'APD_CENTRALS';
+
+LET vStartTime = NOW();
+'$(vQlikTable)':
+LOAD *
+//Load Filters
+,if(match( [Arrest Sector] , 'A'), 'Yes', 'No') as  [F Arrest Sector =  'A']
+,if(match( [Arrest Sector] , 'B'), 'Yes', 'No') as  [F Arrest Sector =  'B']
+,if(match( [Arrest Sector] , 'C'), 'Yes', 'No') as  [F Arrest Sector =  'C']
+,if(match( [Arrest Sector] , 'D'), 'Yes', 'No') as  [F Arrest Sector =  'D']
+,if(match( [Arrest Sector] , 'E'), 'Yes', 'No') as  [F Arrest Sector =  'E']
+,if(match( [Arrest Sector] , 'F'), 'Yes', 'No') as  [F Arrest Sector =  'F']
+,if(match( [Arrest Sector] , 'G'), 'Yes', 'No') as  [F Arrest Sector =  'G']
+,if(match( [Arrest Sector] , 'H'), 'Yes', 'No') as  [F Arrest Sector =  'H']
+,if(match( [Arrest Sector] , 'I'), 'Yes', 'No') as  [F Arrest Sector =  'I']
+,if(match( [Arrest Sector] , 'AV', 'AP'), 'Yes', 'No') as  [F Arrest Sector =  'ABIA']
+,if(match( [Arrest Sector] , '88'), 'Yes', 'No') as [F Arrest Sector = Out of City]
+,if(match( [Arrest Sector] , 'UK'), 'Yes', 'No') as [F Arrest Sector = Unknown]
+,if(match( [Arrest Sector] , '88'), 'No', 'Yes') as [F Arrest Exclude all out of city]
+,if(match( [Arrest Sector] , 'B', 'G', 'I'), 'Yes', 'No') as  [F Arrest Region 1]
+,if(match( [Arrest Sector] , 'A', 'AD', 'A1', 'A2', 'E'), 'Yes', 'No') as  [F Arrest Region 2]
+,if(match( [Arrest Sector] , 'C', 'H'), 'Yes', 'No') as  [F Arrest Region 3]
+,if(match( [Arrest Sector] , 'D', 'F'), 'Yes', 'No') as  [F Arrest Region 4]
+;
+LOAD
+// Time(Time#("AGENCY_TIME1",'hhmm')) as [Arrest Agency Time],
+// time(Time#("COURT_TIME1",'hhmm')) as "Arrest Charge Court Time",
+Time(Time#("ARREST_TIME1",'hhmm')) as [Arrest Time 24hh],
+time(Time#("OFFENSE_TIME1",'hhmm')) as "Arrest Offense Time 24hh",
+"A_RIN" as [Arrest Rin],
+// "ACT_ON_ARREST" as [Act On Arrest],
+"ADDRESS" as [Home Address],
+"AGE_AT_ARREST" as [Age At Arrest],
+// "AGENCY_ACTION" as [Arrest Agency Action],
+// DATE("AGENCY_DATE") as [Arrest Agency Date],
+//"AGENCY_TIME" as [Arrest Agency Time],
+"AGENCY1" as [Arrest Agency1],
+"AGENCY1_DESC" as [Arrest Agency1 Desc],
+"AGENCY2" as [Arrest Agency2],
+"AGENCY2_DESC" as [Arrest Agency2 Desc],
+"APARTMENT" as [Arrest Apartment],
+"APD_RACE" as [Apd Race],
+Trim("AR Corrected District") as [Arrest Sector],
+DATE("AR_ENTRY_DATE") as [Arrest Entry Date],
+"AR_ENTRY_OP_CODE" as [Arrest Entry Op Code],
+"AR_LAST_UPDATE" as [Arrest Last Update],
+"AR_OP_CODE" as [Arrest Op Code],
+"ARMED_WITH1" as [Arrest Armed With1],
+"ARMED_WITH2" as [Arrest Armed With2],
+"Arrest Date Day" as [Arrest Date Day of Week],
+"Arrest Date Month" as [Arrest Date Month],
+"Arrest Date Quarter" as [Arrest Date Quarter],
+"Arrest Date Year" as [Arrest Date Year],
+//"Arrest Time 24HH" as [Arrest Time 24hh],
+Date("ARREST_DATE") as [Arrest Date],
+"ARREST_NUMBER" as [Arrest Number],
+"ARREST_OFFICER1" as [Arrest Officer1],
+"ARREST_OFFICER2" as [Arrest Officer2],
+"ARREST_REASON" as [Arrest Reason],
+"ARREST_REASON_DESC" as [Arrest Reason Desc],
+"ARREST_TYPE" as [Arrest Type],
+"ARREST_TYPE_DESC" as [Arrest Type Desc],
+"BOND_AMOUNT" as [Arrest Charge Bond Amount],
+// "CAUSE_NUMBER" as [Arrest Cause Number],
+// DATE("CD_UPDATED") as [Cd Updated],
+"CENSUS_TRACT" as [Arrest Census Tract],
+"CH_DISPOSITION" as [Arrest Charge Disposition],
+Date("CH_ENTRY_DATE") as [Arrest Charge Entry Date],
+"CH_ENTRY_OP_CODE" as [Arrest Charge Entry Op Code],
+"CH_EVENT_RIN" as [Arrest Charge Event Rin],
+"CH_JURISDICTION" as [Arrest Charge Jurisdiction],
+DATE("CH_LAST_UPDATE") as [Arrest Charge Last Update],
+"CH_OP_CODE" as [Arrest Charge  Op Code],
+"CH_PIN" as [Arrest Charge Pin],
+"CH_RIN" as [Arrest Charge Rin],
+"CH_RTYPE" as [Arrest Charge Rtype],
+"CHARGE" as [Arrest Charge],
+// "CHARGE_COUNT" as [Arrest Charge Count],
+// "CHARGE_NUM" as [Charge Num],
+"CHARGE_STATUS_DESC" as [Arrest Charge Disposition Desc],
+"CLASS" as [Arrest Charge Class],
+"CLASS_DESC" as [Arrest Charge Class Desc],
+"COMP" as [Arrest Charge Title Code Comp/Att],
+// "COUNCIL_DISTRICT" as [Council District],
+"COUNTY" as [Arrest County],
+"COUNTY_DESC" as [Arrest County Desc],
+// Date("COURT_DATE") as [Arrest Charge Court Date],
+// "COURT_OFFICER1" as [Court Officer1],
+// "COURT_OFFICER2" as [Court Officer2],
+// //"COURT_TIME" as [Arrest Charge Court Time],
+// "COURT_TYPE" as [Arrest Charge Court Type],
+"COURT_TYPE_DESC" as [Arrest Charge Court Type Desc],
+// "CURRENT_STATUS" as [Arrest Current Status],
+"CURRENT_STATUS_DESC" as [Arrest Current Status Desc],
+// Date("DISPOSITION_DATE") as [Arrest Charge Disposition Date],
+// "DISPOSITION_PLACE" as [Arrest Charge Disposition Place],
+"DOB" as [Dob],
+// "DOCKET_NUMBER" as [Charge Docket Number],
+// "DS_CH_RIN" as [Ds Ch Rin],
+// "DS_RT" as [Ds Rt],
+"EXT" as [Arrest Charge Title Code Ext],
+// "FINE_AMOUNT" as [Arrest Charge Fine Amount],
+"G1" as [First Name],
+NUM(TRIM("GO_PRIMARY_KEY")) as [GO Primary Key],
+"GRID" as [Arrest Police Reporting Area],
+"IBR_CODE" as [Arrest Charge Title Code NIBRS/UCR],
+// "INFORMATION_NUM" as [Arrest Information Num],
+// Date("ISSUE_DATE") as [Arrest Charge Issue Date],
+// "ISSUING_OFFICER" as [Arrest Charge Issuing Officer],
+// "JURISDICTION" as [Arrest Jurisdiction],
+// "JUVENILE_STATUS" as [Arrest Juvenile Status],
+"LOCATION" as [Arrest Location],
+// "MARTIAL_STATUS_DESC" as [Arrest Martial Status Desc],
+"MUNICIPALITY" as [Arrest Municipality],
+"MUNICIPALITY_DESC" as [Arrest Municipality Desc],
+"OCCUPATION_ACCUSED" as [Arrest Occupation Accused],
+"Offense Date Day" as [Arrest Offense Date Day of Week],
+"Offense Date Month" as [Arrest Offense Date Month],
+"Offense Date Quarter" as [Arrest Offense Date Quarter],
+"Offense Date Year" as [Arrest Offense Date Year],
+//"Offense Time 24HH" as [Arrest Offense Time 24hh],
+Date("OFFENSE_DATE") as [Arrest Charge Offense Date],
+"PHOTO_TAKEN" as [Arrest Photo Taken],
+"PIN" as [Pin],
+Num(TRIM("PRIMARY_KEY")) as [Arrest Primary Key],
+// "RELATED_INFORM1" as [Arrest Related Inform1],
+// "RELATED_INFORM2" as [Arrest Related Inform2],
+// "RELATED_INFORM3" as [Arrest Related Inform3],
+// "RELATED_INFORM4" as [Arrest Related Inform4],
+// "RELATED_INFORM5" as [Arrest Related Inform5],
+// "RELATED_INFORM6" as [Arrest Related Inform6],
+// "RELATED_INFORM7" as [Arrest Related Inform7],
+// "RELATED_INFORM8" as [Arrest Related Inform8],
+// "RELATED_INFORM9" as [Arrest Related Inform9],
+// "RELATED_INFORM10" as [Arrest Related Inform10],
+"RIGHTS_ACK" as [Arrest Rights Ack],
+"SEX" as [Sex],
+// "SOBRIETY" as [Arrest Sobriety],
+// "SOBRIETY_REMARKS" as [Arrest Sobriety Remarks],
+// "ST_COUNT" as [Arrest St Count],
+// "STATEMENT_TAKEN" as [Arrest Statement Taken],
+"STATUTE" as [Arrest Charge Statute],
+"SUMMARY_OF_FACTS" as [Arrest Summary Of Facts],
+// "SUMMON_NUMBER" as [Arrest Charge Summon Number],
+"SURNAME" as [Last Name],
+// "TEXT_COUNT" as [Arrest Text Count],
+"UCR" as [Arrest Charge Title Code],
+"UCR_TRANS" as [Arrest Charge Title Code Desc],
+// "VEHICLE_COUNT" as [Arrest Vehicle Count],
+// "WARRANT_COUNT" as [Arrest Warrant Count],
+// "WARRANT_NUMBER" as [Arrest Charge Warrant Number],
+"X_COORDINATE" as [Arrest X Coordinate],
+"Y_COORDINATE" as [Arrest Y Coordinate],
+"YEAR_OF_BIRTH" as [Year Of Birth],
+"YOUNG_OFFENDER" as [Arrest Young Offender],
+"ZIP" as [Zip],
+"ZONE" as [Arrest District]
+;
+Select 
+"A_RIN",
+// "ACT_ON_ARREST",
+"ADDRESS",
+"AGE_AT_ARREST",
+// "AGENCY_ACTION",
+// "AGENCY_DATE",
+// AGENCY_TIME
+"AGENCY1",
+"AGENCY1_DESC",
+"AGENCY2",
+"AGENCY2_DESC",
+"APARTMENT",
+"APD_RACE",
+"AR Corrected District",
+"AR_ENTRY_DATE",
+"AR_ENTRY_OP_CODE",
+"AR_LAST_UPDATE",
+"AR_OP_CODE",
+"ARMED_WITH1",
+"ARMED_WITH2",
+"Arrest Date Day",
+"Arrest Date Month",
+"Arrest Date Quarter",
+"Arrest Date Year",
+
+"ARREST_DATE",
+"ARREST_NUMBER",
+"ARREST_OFFICER1",
+"ARREST_OFFICER2",
+"ARREST_REASON",
+"ARREST_REASON_DESC",
+"ARREST_TYPE",
+"ARREST_TYPE_DESC",
+"BOND_AMOUNT",
+"CAUSE_NUMBER",
+// "CD_UPDATED",
+"CENSUS_TRACT",
+"CH_DISPOSITION",
+"CH_ENTRY_DATE",
+"CH_ENTRY_OP_CODE",
+"CH_EVENT_RIN",
+"CH_JURISDICTION",
+"CH_LAST_UPDATE",
+"CH_OP_CODE",
+"CH_PIN",
+"CH_RIN",
+"CH_RTYPE",
+"CHARGE",
+// "CHARGE_COUNT",
+// "CHARGE_NUM",
+"CHARGE_STATUS_DESC",
+"CLASS",
+"CLASS_DESC",
+"COMP",
+// "COUNCIL_DISTRICT",
+"COUNTY",
+"COUNTY_DESC",
+// "COURT_DATE",
+// "COURT_OFFICER1",
+// "COURT_OFFICER2",
+
+// "COURT_TYPE",
+"COURT_TYPE_DESC",
+// "CURRENT_STATUS",
+"CURRENT_STATUS_DESC",
+// "DISPOSITION_DATE",
+// "DISPOSITION_PLACE",
+"DOB",
+// "DOCKET_NUMBER",
+// "DS_CH_RIN",
+// "DS_RT",
+"EXT",
+// "FINE_AMOUNT",
+"G1",
+"GO_PRIMARY_KEY",
+"GRID",
+"IBR_CODE",
+// "INFORMATION_NUM",
+// "ISSUE_DATE",
+// "ISSUING_OFFICER",
+// "JURISDICTION",
+// "JUVENILE_STATUS",
+"LOCATION",
+// "MARTIAL_STATUS_DESC",
+"MUNICIPALITY",
+"MUNICIPALITY_DESC",
+"OCCUPATION_ACCUSED",
+"Offense Date Day",
+"Offense Date Month",
+"Offense Date Quarter",
+"Offense Date Year",
+
+"OFFENSE_DATE",
+"PHOTO_TAKEN",
+"PIN",
+"PRIMARY_KEY",
+// "RELATED_INFORM1",
+// "RELATED_INFORM2",
+// "RELATED_INFORM3",
+// "RELATED_INFORM4",
+// "RELATED_INFORM5",
+// "RELATED_INFORM6",
+// "RELATED_INFORM7",
+// "RELATED_INFORM8",
+// "RELATED_INFORM9",
+// "RELATED_INFORM10",
+"RIGHTS_ACK",
+"SEX",
+// "SOBRIETY",
+// "SOBRIETY_REMARKS",
+// "ST_COUNT",
+// "STATEMENT_TAKEN",
+"STATUTE",
+"SUMMARY_OF_FACTS",
+// "SUMMON_NUMBER",
+"SURNAME",
+// "TEXT_COUNT",
+"UCR",
+"UCR_TRANS",
+// "VEHICLE_COUNT",
+// "WARRANT_COUNT",
+// "WARRANT_NUMBER",
+"X_COORDINATE",
+"Y_COORDINATE",
+"YEAR_OF_BIRTH",
+"YOUNG_OFFENDER",
+"ZIP",
+"ZONE",
+// "COURT_TIME",
+//"AGENCY_TIME",
+// "Arrest Time 24HH"  ArrestTime1,
+//"Offense Time 24HH"  OffenseTime1,
+     nvl2(OFFENSE_TIME, SUBSTR(TO_CHAR(OFFENSE_TIME,'0999'),-4,2)||SUBSTR(TO_CHAR(OFFENSE_TIME,'0999'),-2,2), NULL) OFFENSE_TIME1,
+     nvl2(arrest_time, SUBSTR(TO_CHAR(arrest_time,'0999'),-4,2)||SUBSTR(TO_CHAR(arrest_time,'0999'),-2,2), NULL) ARREST_TIME1,	
+     nvl2(AGENCY_TIME, SUBSTR(TO_CHAR(AGENCY_TIME,'0999'),-4,2)||SUBSTR(TO_CHAR(AGENCY_TIME,'0999'),-2,2), NULL) AGENCY_TIME1,
+     nvl2(COURT_TIME, SUBSTR(TO_CHAR(COURT_TIME,'0999'),-4,2)||SUBSTR(TO_CHAR(COURT_TIME,'0999'),-2,2), NULL) COURT_TIME1
+
+from
+$(vDBFrom)
+//from APDIOD.VEHICLE_ALL_VW
+//$(WHERE_PART)
+//where rt= 'GO' 
+;
+
+
+TAG FIELDS 
+[Arrest Entry Date],
+[Arrest Last Update],
+[Arrest Date],
+[Arrest Charge Entry Date],
+[Arrest Charge Last Update],
+[Arrest Charge Offense Date] with $date ;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 5  Stats for no where statement ///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+LIB CONNECT TO 'APD_CENTRALS';
+
+// this has become a need so that we know if the data has all been loaded or notCheck:
+Check:
+//counts the total rows that are in the table.
+load 
+ROWCOUNT
+;
+////Modify to identify the source table
+select count(rownum) ROWCOUNT from $(vDBFrom)  // apdiod.VEHICLE_ALL_VW where rt= 'GO' $(WHERE_PART)
+;
+//passes that row count into a variable that can be compared.
+let vDBRowCount = peek('ROWCOUNT')
+;
+call Stats;
+//Moved to subroutine
+All:
+////Modify to identify the Table your loading
+load * 
+	,'$(vQlikTable)' as "Metadata Qlik Table Name"
+    ,'$(vDBFrom)' as "Metadata Source Table Name"
+    ,'$(vWHERE_PART)' as "Metadata Source Where Statement"
+    ,'$(vQVD)' as "Metadata QVD Location"
+    ,'$(vStartTime)' as "Metadata Start Time"
+    ,'$(vDBRowCount)' as "Metadata Source Row Count"
+    ,'$(vQVDRowCount)' as "Metadata QVD Row Count" 
+    ,'$(vFields)' as "Metadata QVD Count of Fields" 
+resident '$(vQlikTable)';
+Drop table '$(vQlikTable)', Check ; 
+store * 
+from 
+All into 
+'$(vQVD)'
+;

@@ -1,0 +1,224 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////Part 1 Variables //////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+////Report Details
+Let vReportName = 'QVD - Victim Info';
+
+////Report Description
+Let vReportDescription = 'This application is only used to build a data source that closely matches the Discoverer Folder that shares the same name. ';
+
+// Report owner
+Let vReportOwner = 'APD Information Systems';
+
+//Change History Log changes in this area to help people know what has changed
+Let vReportChanges = '';
+
+////QVD Details
+////QVD Builder Variables
+Let vDBFrom = 'APDIOD.VICTIM_INFO'; //Source Table $(vDBFrom)
+// Where part (used in two places both the where statement but also passed into a column so it can be called as metadata on the qvd)
+// Let vWHERE_PART = 'where rt= ''GO'''; //called as  $(WHERE_PART) also 
+//take note this isn't the typical where statement we have use ' ' (escape character) when we want '
+//to put those allow for the system to view the 'GO'
+//Folder to place QVD in 
+LET vFOLDER='lib://APD QVDs - BusinessTechnology/BusinessTechnology\QVDs\APDIOD\Transform'; //called as $(FOLDER)
+//Name of QVD Note that the Folder is passed in the variable
+// Where part (used in two places both the where statement but also passed into a column so it can be called as metadata on the qvd)
+Let vQlikTable = 'Victim Info'; //Qlik Table used for all the data moving forward $(vQlikTable)
+LET vQVD='[$(vFOLDER)/$(vQlikTable).qvd]'; // called as $(QVD)LET MetadataPath = ‘$(vFOLDER)/Metadata/$(vQlikTable)_Metadata.qvd’;
+
+LET MetadataPath = '$(vFOLDER)/Metadata/$(vQlikTable)_Metadata.qvd';
+//We also will look for an existing Metadata QVD and if one is not found, we will create it.
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 2 Meta data ///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+IF FileSize('$(MetadataPath)') > 0 THEN //  The Metadata QVD already exists.
+ELSE // The Metadata QVD needs to be created
+
+Metadata:
+LOAD * INLINE [
+     "Qlik Table Name"
+    , "Source Table Name"
+	, "Source Where Statement"
+	, "QVD Location"
+    , "Reloaded Date"
+    , "Start Time"
+    , "End Time"
+	, "Source Row Count"
+    , "QVD Row Count"  
+    , "QVD Count of Fields"
+    ];
+	STORE Metadata INTO '$(MetadataPath)'(qvd);
+	DROP TABLE Metadata
+;
+END IF  
+
+sub Stats    
+     LET vEndTime = NOW();
+     LET vQVDRowCount = NoOfRows('$(vQlikTable)');
+     LET vFields  = NoOfFields('$(vQlikTable)');
+    
+     Metadata:
+     LOAD * FROM '$(MetadataPath)'(qvd); //   WHERE TableName <> ‘$(vQlikTable)’
+     CONCATENATE (Metadata)
+     LOAD DISTINCT 
+	'$(vQlikTable)' as "Qlik Table Name"
+    ,'$(vDBFrom)' as "Source Table Name"
+    ,'$(vWHERE_PART)' as "Source Where Statement"
+    ,'$(vQVD)' as "QVD Location"
+    ,DATE(NOW()) AS "Reloaded Date"
+    ,'$(vStartTime)' as "Start Time"
+    ,'$(vEndTime)' as "End Time"
+    ,'$(vDBRowCount)' as "Source Row Count"
+    ,'$(vQVDRowCount)' as "QVD Row Count" 
+    ,'$(vFields)' as "QVD Count of Fields"
+     RESIDENT Metadata;
+     STORE Metadata INTO $(MetadataPath)(qvd);
+//     DROP TABLE Metadata;
+	 
+end sub 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 3 Mapping /////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+FieldMap:
+Mapping LOAD
+    "Datawarehouse Source Column Name",
+    "Qlik Field Name"
+FROM [lib://APD QVDs - BusinessTechnology/BusinessTechnology/QVDs/APDIOD/Transform/Documentation/Victim_info-Ready.xlsx]
+(ooxml, embedded labels, table is Dimensions);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 4 Load File ///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+LIB CONNECT TO 'APD_CENTRALS';
+
+LET vStartTime = NOW();
+
+
+ '$(vQlikTable)':
+Load *
+,if([Occ Date] >= '01/01/2020' and [Occ Date] < '01/01/2021', 'Yes', 'No') as [F Occurs in 2020]
+,if([Occ Date] >= '01/01/2019' and [Occ Date] < '01/01/2020', 'Yes', 'No') as [F Occurs in 2019]
+,if([Occ Date] >= '01/01/2018' and [Occ Date] < '01/01/2019', 'Yes', 'No') as [F Occurs in 2018]
+,if([Occ Date] >= '01/01/2017' and [Occ Date] < '01/01/2018', 'Yes', 'No') as [F Occurs in 2017]
+,if([Occ Date] >= '01/01/2016' and [Occ Date] < '01/01/2017', 'Yes', 'No') as [F Occurs in 2016]
+,if([Rep Date] >= '01/01/2016' and [Rep Date] < '01/01/2017', 'Yes', 'No') as [F Reported in 2016]
+,if([Rep Date] >= '01/01/2017' and [Rep Date] < '01/01/2018', 'Yes', 'No') as [F Reported in 2017]
+,if([Rep Date] >= '01/01/2018' and [Rep Date] < '01/01/2019', 'Yes', 'No') as [F Reported in 2018]
+,if([Rep Date] >= '01/01/2019' and [Rep Date] < '01/01/2020', 'Yes', 'No') as [F Reported in 2019]
+,if([Rep Date] >= '01/01/2020' and [Rep Date] < '01/01/2021', 'Yes', 'No') as [F Reported in 2020]
+,if(match(HIGHEST_NIBRS_OFFENSE_CODE,'09A', '11A', '120', '13A'), 'Yes', 'No') as [F Part I - Violent Offenses]
+,if(match(HIGHEST_NIBRS_OFFENSE_CODE,'09A'), 'Yes', 'No') as [F Part I - Murder]
+,if(match(HIGHEST_NIBRS_OFFENSE_CODE, '11A', '11B', '11C'), 'Yes', 'No') as [F Part I - Rape]
+,if(match(HIGHEST_NIBRS_OFFENSE_CODE,'120'), 'Yes', 'No') as [F Part I - Robbery]
+,if(match(HIGHEST_NIBRS_OFFENSE_CODE, '13A'), 'Yes', 'No') as [F Part I - Aggravated Assault]
+
+;
+Load *
+ ,Date(OCC_DATE,'MM/DD/YYYY') as [Occ Date]
+ ,Date(PERS_DATE_OF_BIRTH,'MM/DD/YYYY') as [Pers Date Of Birth]
+ ,Date(REP_DATE,'MM/DD/YYYY') as [Rep Date]
+ ,Date(TO_OCC_DATE,'MM/DD/YYYY') as [To Occ Date]
+;
+
+Select
+"APARTMENT",
+"COMPLETED_ATTEMPTED",
+"DAY_OF_WEEK",
+"FAMILY_VIOLENCE",
+"GO_DISTRICT",
+"GO_HIGHEST_OFF_CODE_EXT",
+"GO_HIGHEST_OFFENSE_CODE",
+"GO_HIGHEST_OFFENSE_DESC",
+"GO_RIN",
+"GRID",
+"HIGHEST_NIBRS_OFFENSE_CODE",
+"HIGHEST_VICTIM_DESC",
+"HIGHEST_VICTIM_NIBRS",
+"INCIDENT_NUMBER",
+"INJURY",
+"LOCATION",
+"OCC_DATE",
+"OCC_TIME",
+"PERS_DATE_OF_BIRTH",
+"PERS_ETHNICITY",
+"PERS_SEX",
+"PERSON_COUNT",
+"PERSON_FIRST_NAME",
+"PERSON_LAST_NAME",
+"PERSON_RACE",
+"PERSON_ROLE",
+"PIN",
+"PRIMARY_KEY",
+"RELATION_DESC1",
+"RELATION_DESC2",
+"RELATION_DESC3",
+"RELATION_DESC4",
+"RELATION_DESC5",
+"RELATION_DESC6",
+"RELATION_DESC7",
+"RELATION_DESC8",
+"RELATION_DESC9",
+"RELATION_DESC10",
+"REP_DATE",
+"ROLE_NUMBER",
+"STATUS",
+"STUDY_FLAG",
+"TO_OCC_DATE",
+"WEEK_DAY",
+"X",
+"Y",
+"ZONE"
+
+
+from
+$(vDBFrom)
+;
+
+rename fields using FieldMap;
+TAG FIELDS [Occ Date] , [Pers Date Of Birth], [Rep Date] , [To Occ Date] with $date ;
+
+Drop Fields  OCC_DATE, PERS_DATE_OF_BIRTH ,REP_DATE , TO_OCC_DATE;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 5  Stats for no where statement ///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+LIB CONNECT TO 'APD_CENTRALS';
+
+// this has become a need so that we know if the data has all been loaded or notCheck:
+Check:
+//counts the total rows that are in the table.
+load 
+ROWCOUNT
+;
+////Modify to identify the source table
+select count(rownum) ROWCOUNT from $(vDBFrom)  // apdiod.VEHICLE_ALL_VW where rt= 'GO' $(WHERE_PART)
+;
+//passes that row count into a variable that can be compared.
+let vDBRowCount = peek('ROWCOUNT')
+;
+call Stats;
+//Moved to subroutine
+All:
+////Modify to identify the Table your loading
+load * 
+	,'$(vQlikTable)' as "Metadata Qlik Table Name"
+    ,'$(vDBFrom)' as "Metadata Source Table Name"
+    ,'$(vWHERE_PART)' as "Metadata Source Where Statement"
+    ,'$(vQVD)' as "Metadata QVD Location"
+    ,'$(vStartTime)' as "Metadata Start Time"
+    ,'$(vDBRowCount)' as "Metadata Source Row Count"
+    ,'$(vQVDRowCount)' as "Metadata QVD Row Count" 
+    ,'$(vFields)' as "Metadata QVD Count of Fields" 
+resident '$(vQlikTable)';
+Drop table '$(vQlikTable)', Check ; 
+store * 
+from 
+All into 
+'$(vQVD)'
+;

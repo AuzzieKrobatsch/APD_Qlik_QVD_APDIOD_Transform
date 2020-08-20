@@ -1,0 +1,170 @@
+
+///Save this file in the specific scripts folder???
+////Report Details
+Let vReportName = 'QVD - General Offenses Businesses';
+
+////Report Description
+Let vReportDescription = 'This application is only used to build a data 
+source that closely matches the Discoverer Folder that shares the same name. ';
+
+// Report owner
+Let vReportOwner = 'APD Information Systems';
+
+//Change History Log changes in this area to help people know what has changed
+Let vReportChanges = '';
+
+////QVD Details
+////QVD Builder Variables
+Let vDBFrom = 'APDIOD.GO_BUSINESS_ROLE_VW'; //Source Table $(vDBFrom)
+// Where part (used in two places both the where statement but also passed into a column so it can be called as metadata on the qvd)
+// Let vWHERE_PART = 'where rt= ''GO'''; //called as  $(WHERE_PART) also 
+//take note this isn't the typical where statement we have use ' ' (escape character) when we want '
+//to put those allow for the system to view the 'GO'
+//Folder to place QVD in 
+LET vFOLDER='lib://APD QVDs - BusinessTechnology/BusinessTechnology\QVDs\APDIOD\Transform'; //called as $(FOLDER)
+//Name of QVD Note that the Folder is passed in the variable
+// Where part (used in two places both the where statement but also passed into a column so it can be called as metadata on the qvd)
+Let vQlikTable = 'General Offenses Businesses'; //Qlik Table used for all the data moving forward $(vQlikTable)
+LET vQVD='[$(vFOLDER)/$(vQlikTable).qvd]'; // called as $(QVD)LET MetadataPath = ‘$(vFOLDER)/Metadata/$(vQlikTable)_Metadata.qvd’;
+
+LET MetadataPath = '$(vFOLDER)/Metadata/$(vQlikTable)_Metadata.qvd';
+//We also will look for an existing Metadata QVD and if one is not found, we will create it.
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 2 Meta data ///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+IF FileSize('$(MetadataPath)') > 0 THEN //  The Metadata QVD already exists.
+ELSE // The Metadata QVD needs to be created
+
+Metadata:
+LOAD * INLINE [
+     "Qlik Table Name"
+    , "Source Table Name"
+	, "Source Where Statement"
+	, "QVD Location"
+    , "Reloaded Date"
+    , "Start Time"
+    , "End Time"
+	, "Source Row Count"
+    , "QVD Row Count"  
+    , "QVD Count of Fields"
+    ];
+	STORE Metadata INTO '$(MetadataPath)'(qvd);
+	DROP TABLE Metadata
+;
+END IF  
+
+sub Stats    
+     LET vEndTime = NOW();
+     LET vQVDRowCount = NoOfRows('$(vQlikTable)');
+     LET vFields  = NoOfFields('$(vQlikTable)');
+    
+     Metadata:
+     LOAD * FROM '$(MetadataPath)'(qvd); //   WHERE TableName <> ‘$(vQlikTable)’
+     CONCATENATE (Metadata)
+     LOAD DISTINCT 
+	'$(vQlikTable)' as "Qlik Table Name"
+    ,'$(vDBFrom)' as "Source Table Name"
+    ,'$(vWHERE_PART)' as "Source Where Statement"
+    ,'$(vQVD)' as "QVD Location"
+    ,DATE(NOW()) AS "Reloaded Date"
+    ,'$(vStartTime)' as "Start Time"
+    ,'$(vEndTime)' as "End Time"
+    ,'$(vDBRowCount)' as "Source Row Count"
+    ,'$(vQVDRowCount)' as "QVD Row Count" 
+    ,'$(vFields)' as "QVD Count of Fields"
+     RESIDENT Metadata;
+     STORE Metadata INTO $(MetadataPath)(qvd);
+//     DROP TABLE Metadata;
+	 
+end sub 
+
+//$(MUST_INCLUDE=[lib://APD QVDs - BusinessTechnology/BusinessTechnology/QVS - Common\QVD_2_Metadata.qvs]);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 3 Mapping /////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//Data Dictionary and rename fields file
+FieldMap:
+MAPPING LOAD
+    "Datawarehouse Source Column Name",
+    "Discoverer Name"
+FROM [lib://APD QVDs - BusinessTechnology/BusinessTechnology/QVDs/APDIOD/Transform/Documentation/General Offense Businesses_Ready.xlsx]
+(ooxml, embedded labels, table is Dimensions);
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 4 Load File ///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////LIB CONNECT TO 'APD_CENTRALS';
+LIB CONNECT TO 'APD_CENTRALS';
+
+LET vStartTime = NOW();
+
+
+ '$(vQlikTable)':
+SELECT 
+ BIN
+,BUSNAME
+,ADDRESS
+,CITY
+,STATE
+,ZIP
+,BUS_TYPE
+,BUS_TYPE_DESC
+,AREA_CODE
+,PHONE_NUMBER
+,EVENT_COUNT
+,ALT_BUS_COUNT
+,ALIAS
+,RIN
+,ROLE
+,BUS_ROLE_DESC
+,ROLE_NUMBER
+
+from
+$(vDBFrom)
+;
+
+rename fields using FieldMap;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////PART 5  Stats for no where statement ///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// LIB CONNECT TO 'APD_CENTRALS';
+// $(MUST_INCLUDE=[lib://APD QVDs - BusinessTechnology/BusinessTechnology/QVS - Common\QVD_5a_MetadataPart2NoWhereStatement.qvs]);
+LIB CONNECT TO 'APD_CENTRALS';
+
+// this has become a need so that we know if the data has all been loaded or notCheck:
+Check:
+//counts the total rows that are in the table.
+load 
+ROWCOUNT
+;
+////Modify to identify the source table
+select count(rownum) ROWCOUNT from $(vDBFrom)  // apdiod.VEHICLE_ALL_VW where rt= 'GO' $(WHERE_PART)
+;
+//passes that row count into a variable that can be compared.
+let vDBRowCount = peek('ROWCOUNT')
+;
+call Stats;
+//Moved to subroutine
+All:
+////Modify to identify the Table your loading
+load * 
+	,'$(vQlikTable)' as "Metadata Qlik Table Name"
+    ,'$(vDBFrom)' as "Metadata Source Table Name"
+    ,'$(vWHERE_PART)' as "Metadata Source Where Statement"
+    ,'$(vQVD)' as "Metadata QVD Location"
+    ,'$(vStartTime)' as "Metadata Start Time"
+    ,'$(vDBRowCount)' as "Metadata Source Row Count"
+    ,'$(vQVDRowCount)' as "Metadata QVD Row Count" 
+    ,'$(vFields)' as "Metadata QVD Count of Fields" 
+resident '$(vQlikTable)';
+Drop table '$(vQlikTable)', Check ; 
+store * 
+from 
+All into 
+'$(vQVD)'
+;
